@@ -56,12 +56,12 @@ jobs:
             bin: arcane
             use_cross: true
           - target: x86_64-apple-darwin
-            os: macos-14
+            os: macos-latest
             archive: tar.gz
             bin: arcane
             use_cross: false
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             archive: tar.gz
             bin: arcane
             use_cross: false
