@@ -8,6 +8,7 @@ use crate::error::{CliError, Result};
 use crate::fastcdc::ChunkingMode;
 
 pub const PROJECT_CONFIG_FILENAME: &str = "arcane.json";
+pub const DEFAULT_PORTAL_URL: &str = "https://portal.arcane-powered.com";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StoredAuthConfig {
@@ -30,6 +31,7 @@ pub struct ResolvedAuth {
 pub enum AuthSource {
     Env,
     ConfigFile,
+    Default,
 }
 
 impl ResolvedAuth {
@@ -137,11 +139,7 @@ pub fn resolve_auth() -> Result<ResolvedAuth> {
         Some(u) => (u, AuthSource::Env),
         None => match stored.portal_url.filter(|s| !s.trim().is_empty()) {
             Some(u) => (u, AuthSource::ConfigFile),
-            None => {
-                return Err(CliError::msg(
-                    "Portal URL is not configured. Run `arcane login` or set ARCANE_PORTAL_URL.",
-                ));
-            }
+            None => (DEFAULT_PORTAL_URL.to_string(), AuthSource::Default),
         },
     };
 

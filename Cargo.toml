@@ -1,6 +1,6 @@
 [package]
 name = "arcane-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Official CLI for uploading and managing game builds on Arcane Powered"
 license = "MIT"

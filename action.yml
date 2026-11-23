@@ -11,7 +11,7 @@ inputs:
   portal-url:
     description: "Arcane Publisher Portal origin URL"
     required: false
-    default: "https://portal.arcanepowered.com"
+    default: "https://portal.arcane-powered.com"
   title:
     description: "Title ID (optional if set in arcane.json)"
     required: false

@@ -5,11 +5,9 @@ use serde_json::json;
 use crate::api::ApiClient;
 use crate::config::{
     delete_stored_auth, global_config_path, mask_api_key, resolve_auth, save_stored_auth,
-    AuthSource, ResolvedAuth, StoredAuthConfig,
+    AuthSource, ResolvedAuth, StoredAuthConfig, DEFAULT_PORTAL_URL,
 };
 use crate::error::{CliError, Result};
-
-const DEFAULT_PORTAL_URL: &str = "https://portal.arcanepowered.com";
 
 pub struct LoginArgs {
     pub api_key: Option<String>,

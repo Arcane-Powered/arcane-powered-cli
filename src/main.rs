@@ -33,7 +33,7 @@ enum Commands {
         /// Studio API key (if omitted, prompts interactively)
         #[arg(long, env = "ARCANE_API_KEY")]
         api_key: Option<String>,
-        /// Portal origin URL (e.g. https://portal.arcanepowered.com)
+        /// Portal origin URL (default: https://portal.arcane-powered.com)
         #[arg(long, env = "ARCANE_PORTAL_URL")]
         portal_url: Option<String>,
         /// Skip verifying credentials against the portal
