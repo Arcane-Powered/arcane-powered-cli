@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{generate, Shell};
 
-use arcane_cli::commands::{auth, init, jobs, push, titles};
+use arcane_cli::commands::{auth, builds, init, jobs, push, release, titles};
 use arcane_cli::error::Result;
 use arcane_cli::fastcdc::ChunkingMode;
 
@@ -149,11 +149,77 @@ enum Commands {
         title: Option<String>,
     },
 
+    /// Inspect, pin, unpin, or delete builds for a title
+    Builds {
+        #[command(subcommand)]
+        command: BuildsCommands,
+    },
+
+    /// Point a build channel (e.g. live, beta) to a specific version
+    Release {
+        /// Channel name (e.g. live, beta)
+        channel: String,
+        /// Build version to activate on the channel
+        version: String,
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
+        /// Restrict channel switch to a single platform
+        #[arg(long)]
+        platform: Option<String>,
+    },
+
+    /// Roll back the live channel to an earlier published version
+    Rollback {
+        /// Previously published version to restore
+        version: String,
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
+    },
+
     /// Generate shell completions (bash, zsh, fish, powershell)
     Completions {
         /// Target shell
         #[arg(value_enum)]
         shell: Shell,
+    },
+}
+
+#[derive(Subcommand)]
+enum BuildsCommands {
+    /// List builds with channels and deduplicated CAS storage footprint
+    List {
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
+        /// Filter by platform
+        #[arg(long)]
+        platform: Option<String>,
+    },
+    /// Pin a build to protect it from deletion
+    Pin {
+        /// Build UUID to pin
+        build_id: String,
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// Unpin a previously pinned build
+    Unpin {
+        /// Build UUID to unpin
+        build_id: String,
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
+    },
+    /// Delete an inactive, unpinned build
+    Delete {
+        /// Build UUID to delete
+        build_id: String,
+        /// Title ID (optional if set in arcane.json)
+        #[arg(long)]
+        title: Option<String>,
     },
 }
 
@@ -266,6 +332,69 @@ async fn dispatch(cli: Cli) -> Result<()> {
             .await
         }
         Commands::Jobs { title } => jobs::run(jobs::JobsArgs { title, json }).await,
+        Commands::Builds { command } => match command {
+            BuildsCommands::List { title, platform } => {
+                builds::list(builds::BuildsListArgs {
+                    title,
+                    platform,
+                    json,
+                })
+                .await
+            }
+            BuildsCommands::Pin { build_id, title } => {
+                builds::set_pinned(
+                    builds::BuildActionArgs {
+                        title,
+                        build_id,
+                        json,
+                    },
+                    true,
+                )
+                .await
+            }
+            BuildsCommands::Unpin { build_id, title } => {
+                builds::set_pinned(
+                    builds::BuildActionArgs {
+                        title,
+                        build_id,
+                        json,
+                    },
+                    false,
+                )
+                .await
+            }
+            BuildsCommands::Delete { build_id, title } => {
+                builds::delete(builds::BuildActionArgs {
+                    title,
+                    build_id,
+                    json,
+                })
+                .await
+            }
+        },
+        Commands::Release {
+            channel,
+            version,
+            title,
+            platform,
+        } => {
+            release::release(release::ReleaseArgs {
+                channel,
+                version,
+                title,
+                platform,
+                json,
+            })
+            .await
+        }
+        Commands::Rollback { version, title } => {
+            release::rollback(release::RollbackArgs {
+                version,
+                title,
+                json,
+            })
+            .await
+        }
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "arcane", &mut io::stdout());

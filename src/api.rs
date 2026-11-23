@@ -334,6 +334,93 @@ impl ApiClient {
         Ok(resp.jobs)
     }
 
+    pub async fn list_builds(&self, title_id: &str) -> Result<Vec<GameBuild>> {
+        let resp: BuildsListResponse = self
+            .request_json(
+                Method::GET,
+                &format!("/titles/{title_id}/builds"),
+                None::<&()>,
+            )
+            .await?;
+        Ok(resp.builds)
+    }
+
+    pub async fn get_build_storage(&self, title_id: &str) -> Result<BuildStorageStats> {
+        self.request_json(
+            Method::GET,
+            &format!("/titles/{title_id}/builds/storage"),
+            None::<&()>,
+        )
+        .await
+    }
+
+    pub async fn list_build_channels(&self, title_id: &str) -> Result<Vec<BuildChannel>> {
+        let val = self
+            .request_raw(
+                Method::GET,
+                &format!("/titles/{title_id}/builds/channels"),
+                None::<&()>,
+            )
+            .await?;
+        if val.is_array() {
+            Ok(serde_json::from_value(val)?)
+        } else if let Some(arr) = val.get("channels") {
+            Ok(serde_json::from_value(arr.clone())?)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    pub async fn set_build_channel(
+        &self,
+        title_id: &str,
+        channel: &str,
+        build_id: &str,
+    ) -> Result<ChannelActivationResponse> {
+        let body = serde_json::json!({ "build_id": build_id });
+        self.request_json(
+            Method::PUT,
+            &format!("/titles/{title_id}/builds/channels/{channel}"),
+            Some(&body),
+        )
+        .await
+    }
+
+    pub async fn rollback_version(&self, title_id: &str, version: &str) -> Result<Vec<GameBuild>> {
+        let resp: BuildsListResponse = self
+            .request_json(
+                Method::POST,
+                &format!("/titles/{title_id}/builds/versions/{version}/rollback"),
+                None::<&()>,
+            )
+            .await?;
+        Ok(resp.builds)
+    }
+
+    pub async fn set_build_pinned(
+        &self,
+        title_id: &str,
+        build_id: &str,
+        pinned: bool,
+    ) -> Result<GameBuild> {
+        let body = serde_json::json!({ "pinned": pinned });
+        self.request_json(
+            Method::PATCH,
+            &format!("/titles/{title_id}/builds/{build_id}"),
+            Some(&body),
+        )
+        .await
+    }
+
+    pub async fn delete_build(&self, title_id: &str, build_id: &str) -> Result<Value> {
+        self.request_raw(
+            Method::DELETE,
+            &format!("/titles/{title_id}/builds/{build_id}"),
+            None::<&()>,
+        )
+        .await
+    }
+
     pub async fn publish_and_wait<F>(
         &self,
         session_route: &str,
@@ -546,4 +633,92 @@ pub struct PublishJobListItem {
     pub created_at: String,
     pub updated_at: String,
     pub finished_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildsListResponse {
+    #[serde(default)]
+    pub builds: Vec<GameBuild>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameBuild {
+    pub id: String,
+    #[serde(default)]
+    pub game_id: Option<String>,
+    #[serde(default)]
+    pub dlc_id: Option<String>,
+    pub version: String,
+    pub platform: String,
+    pub status: String,
+    #[serde(default)]
+    pub deploy_status: Option<String>,
+    #[serde(default)]
+    pub total_bytes: u64,
+    #[serde(default)]
+    pub chunk_count: u64,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub published_at: Option<String>,
+    #[serde(default)]
+    pub scheduled_at: Option<String>,
+    #[serde(default)]
+    pub is_demo: bool,
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildStorageStats {
+    #[serde(default)]
+    pub unique_blobs: u64,
+    #[serde(default)]
+    pub deduped_stored_bytes: u64,
+    #[serde(default)]
+    pub deduped_raw_bytes: u64,
+    #[serde(default)]
+    pub builds: Vec<BuildStorageEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildStorageEntry {
+    pub build_id: String,
+    pub version: String,
+    pub platform: String,
+    pub status: String,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub total_bytes: u64,
+    #[serde(default)]
+    pub stored_bytes: u64,
+    #[serde(default)]
+    pub reclaimable_bytes: u64,
+    #[serde(default)]
+    pub blob_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildChannel {
+    pub channel: String,
+    pub platform: String,
+    #[serde(default)]
+    pub is_demo: bool,
+    pub build_id: String,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelActivationResponse {
+    pub channel: String,
+    pub platform: String,
+    #[serde(default)]
+    pub is_demo: bool,
+    pub build_id: String,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub build: Option<GameBuild>,
 }

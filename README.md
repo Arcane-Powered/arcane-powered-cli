@@ -53,6 +53,10 @@ In CI, set `ARCANE_API_KEY` and `ARCANE_PORTAL_URL` — environment variables al
 | `arcane titles` | List studio games and add-ons |
 | `arcane push [folder]` | Chunk, deduplicate, compress, upload, and publish a build |
 | `arcane jobs [--title <id>]` | List recent publish jobs (running, done, error) |
+| `arcane builds list [--title <id>]` | List builds, active channels, and deduplicated CAS storage |
+| `arcane builds pin\|unpin\|delete <build-id>` | Protect or remove builds |
+| `arcane release <channel> <version>` | Point a build channel (`live`, `beta`, …) to a version |
+| `arcane rollback <version>` | Roll back the `live` channel to a previously published version |
 | `arcane completions <shell>` | Generate shell completions (`bash`, `zsh`, `fish`, `powershell`) |
 
 All commands accept `--json` for machine-readable output.
