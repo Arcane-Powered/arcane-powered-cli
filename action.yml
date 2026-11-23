@@ -1,0 +1,174 @@
+name: "Arcane Powered — Push Build"
+description: "Upload and publish game builds to Arcane Powered using FastCDC deduplication and zstd compression."
+branding:
+  icon: upload-cloud
+  color: purple
+
+inputs:
+  api-key:
+    description: "Studio API key (Settings -> API keys in Arcane Publisher Portal)"
+    required: true
+  portal-url:
+    description: "Arcane Publisher Portal origin URL"
+    required: false
+    default: "https://portal.arcanepowered.com"
+  title:
+    description: "Title ID (optional if set in arcane.json)"
+    required: false
+  platform:
+    description: "Target platform: windows, macos, linux, web, or android"
+    required: true
+  version:
+    description: "Build version (defaults to git tag or GITHUB_REF_NAME)"
+    required: false
+  folder:
+    description: "Path to the build folder (optional if configured in arcane.json)"
+    required: false
+  draft:
+    description: "Keep the build as a draft instead of publishing immediately"
+    required: false
+    default: "false"
+  scheduled-at:
+    description: "Publish at this ISO 8601 timestamp (kept as draft until then)"
+    required: false
+  create-notes:
+    description: "Create an empty draft patch note linked to this build version"
+    required: false
+    default: "false"
+  notes-file:
+    description: "Path to a Markdown file for the draft patch note"
+    required: false
+  chunking:
+    description: "Chunking mode for native builds: cdc or fixed"
+    required: false
+  no-compress:
+    description: "Disable zstd compression for chunks"
+    required: false
+    default: "false"
+  concurrency:
+    description: "Concurrent chunk upload workers"
+    required: false
+  ignore:
+    description: "Comma-separated list of file/folder patterns to ignore"
+    required: false
+  cli-version:
+    description: "CLI release tag to download (default: latest)"
+    required: false
+    default: "latest"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install arcane CLI
+      shell: bash
+      env:
+        CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        set -euo pipefail
+        OS="$(uname -s)"
+        ARCH="$(uname -m)"
+        case "$OS" in
+          Linux)
+            case "$ARCH" in
+              x86_64)  TARGET="x86_64-unknown-linux-musl" ;;
+              aarch64|arm64) TARGET="aarch64-unknown-linux-musl" ;;
+              *) echo "Unsupported Linux arch: $ARCH" >&2; exit 1 ;;
+            esac
+            EXT="tar.gz"
+            BIN="arcane"
+            ;;
+          Darwin)
+            case "$ARCH" in
+              x86_64) TARGET="x86_64-apple-darwin" ;;
+              arm64)  TARGET="aarch64-apple-darwin" ;;
+              *) echo "Unsupported macOS arch: $ARCH" >&2; exit 1 ;;
+            esac
+            EXT="tar.gz"
+            BIN="arcane"
+            ;;
+          MINGW*|MSYS*|CYGWIN*)
+            TARGET="x86_64-pc-windows-msvc"
+            EXT="zip"
+            BIN="arcane.exe"
+            ;;
+          *)
+            echo "Unsupported OS: $OS" >&2
+            exit 1
+            ;;
+        esac
+
+        REPO="Arcane-Powered/arcane-powered-cli"
+        if [ "$CLI_VERSION" = "latest" ]; then
+          TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
+        else
+          TAG="$CLI_VERSION"
+        fi
+
+        ARCHIVE="arcane-${TAG}-${TARGET}.${EXT}"
+        BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+        TMP_DIR="$(mktemp -d)"
+        curl -fsSL "${BASE_URL}/${ARCHIVE}" -o "${TMP_DIR}/${ARCHIVE}"
+        curl -fsSL "${BASE_URL}/SHA256SUMS.txt" -o "${TMP_DIR}/SHA256SUMS.txt"
+
+        EXPECTED="$(grep " ${ARCHIVE}$" "${TMP_DIR}/SHA256SUMS.txt" | awk '{print $1}')"
+        if [ -n "$EXPECTED" ]; then
+          if command -v sha256sum >/dev/null 2>&1; then
+            ACTUAL="$(sha256sum "${TMP_DIR}/${ARCHIVE}" | awk '{print $1}')"
+          else
+            ACTUAL="$(shasum -a 256 "${TMP_DIR}/${ARCHIVE}" | awk '{print $1}')"
+          fi
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "Checksum mismatch for ${ARCHIVE}!" >&2
+            exit 1
+          fi
+        fi
+
+        INSTALL_DIR="${RUNNER_TEMP}/arcane-cli"
+        mkdir -p "$INSTALL_DIR"
+        if [ "$EXT" = "tar.gz" ]; then
+          tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$INSTALL_DIR"
+          chmod +x "${INSTALL_DIR}/${BIN}"
+        else
+          unzip -oq "${TMP_DIR}/${ARCHIVE}" -d "$INSTALL_DIR"
+        fi
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+
+    - name: Push build to Arcane Powered
+      shell: bash
+      env:
+        ARCANE_API_KEY: ${{ inputs.api-key }}
+        ARCANE_PORTAL_URL: ${{ inputs.portal-url }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_FOLDER: ${{ inputs.folder }}
+        INPUT_DRAFT: ${{ inputs.draft }}
+        INPUT_SCHEDULED_AT: ${{ inputs.scheduled-at }}
+        INPUT_CREATE_NOTES: ${{ inputs.create-notes }}
+        INPUT_NOTES_FILE: ${{ inputs.notes-file }}
+        INPUT_CHUNKING: ${{ inputs.chunking }}
+        INPUT_NO_COMPRESS: ${{ inputs.no-compress }}
+        INPUT_CONCURRENCY: ${{ inputs.concurrency }}
+        INPUT_IGNORE: ${{ inputs.ignore }}
+      run: |
+        set -euo pipefail
+        ARGS=(push)
+        [ -n "$INPUT_FOLDER" ] && ARGS+=("$INPUT_FOLDER")
+        [ -n "$INPUT_TITLE" ] && ARGS+=(--title "$INPUT_TITLE")
+        ARGS+=(--platform "$INPUT_PLATFORM")
+        [ -n "$INPUT_VERSION" ] && ARGS+=(--version "$INPUT_VERSION")
+        [ "$INPUT_DRAFT" = "true" ] && ARGS+=(--draft)
+        [ -n "$INPUT_SCHEDULED_AT" ] && ARGS+=(--scheduled-at "$INPUT_SCHEDULED_AT")
+        [ "$INPUT_CREATE_NOTES" = "true" ] && ARGS+=(--create-notes)
+        [ -n "$INPUT_NOTES_FILE" ] && ARGS+=(--notes-file "$INPUT_NOTES_FILE")
+        [ -n "$INPUT_CHUNKING" ] && ARGS+=(--chunking "$INPUT_CHUNKING")
+        [ "$INPUT_NO_COMPRESS" = "true" ] && ARGS+=(--no-compress)
+        [ -n "$INPUT_CONCURRENCY" ] && ARGS+=(--concurrency "$INPUT_CONCURRENCY")
+        if [ -n "$INPUT_IGNORE" ]; then
+          IFS=',' read -ra PATTERNS <<< "$INPUT_IGNORE"
+          for p in "${PATTERNS[@]}"; do
+            trimmed="$(echo "$p" | xargs)"
+            [ -n "$trimmed" ] && ARGS+=(--ignore "$trimmed")
+          done
+        fi
+        arcane "${ARGS[@]}"
